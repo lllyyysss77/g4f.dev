@@ -1,0 +1,364 @@
+# Instincts generated from https://github.com/lllyyysss77/g4f.dev
+# Generated: 2026-05-13T02:24:50.739Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: g4f.dev-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat
+
+## Evidence
+
+- 4 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: add roleplay functionality with chat management, routing, and translations, feat: enhance message chunking with server info and improve error handling
+
+---
+id: g4f.dev-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Commit Length
+
+## Action
+
+Write moderate-length commit messages (~74 characters)
+
+## Evidence
+
+- Average commit message length: 74 chars
+- Based on 4 commits
+
+---
+id: g4f.dev-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: g4f.dev-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: g4f.dev-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: g4f.dev-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: g4f.dev-workflow-update-translation-and-ui-workflow
+trigger: "when doing update translation and ui workflow"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/lllyyysss77/g4f.dev
+---
+
+# G4f.dev Workflow Update Translation And Ui Workflow
+
+## Action
+
+Follow the update-translation-and-ui-workflow workflow:
+1. Edit or add translation keys in snippets.json.
+2. Update translations.js to handle new or changed keys.
+3. Modify UI components in components.js to use updated translations.
+4. Update router.js or store.js if navigation/state is affected.
+5. Adjust index.html if necessary for UI changes.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: playground/js/snippets.json, playground/js/translations.js, playground/js/components.js
+
+---
+id: g4f.dev-instinct-camelCase-files
+trigger: "When creating or renaming a file in the codebase"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct CamelCase Files
+
+## Action
+
+Name the file using camelCase convention
+
+## Evidence
+
+- Pattern in namingConventions.files: camelCase
+
+---
+id: g4f.dev-instinct-camelCase-functions
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct CamelCase Functions
+
+## Action
+
+Name the function using camelCase convention
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: g4f.dev-instinct-pascalCase-classes
+trigger: "When declaring a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct PascalCase Classes
+
+## Action
+
+Name the class using PascalCase convention
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: g4f.dev-instinct-screamingSnakeCase-constants
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct ScreamingSnakeCase Constants
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE convention
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: g4f.dev-instinct-relative-imports
+trigger: "When importing modules within the codebase"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Relative Imports
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: g4f.dev-instinct-named-exports
+trigger: "When exporting functions, classes, or variables"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Named Exports
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: g4f.dev-instinct-try-catch-error-handling
+trigger: "When handling potential errors in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Try Catch Error Handling
+
+## Action
+
+Wrap code in try-catch blocks
+
+## Evidence
+
+- Pattern in errorHandling.style: try-catch
+
+---
+id: g4f.dev-instinct-global-error-handler
+trigger: "When setting up error handling for the application"
+confidence: 0.7
+domain: architecture
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Global Error Handler
+
+## Action
+
+Implement a global error handler
+
+## Evidence
+
+- Pattern in errorHandling.globalHandler: true
+
+---
+id: g4f.dev-instinct-conventional-commits-feat
+trigger: "When making a commit that adds a new feature"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Conventional Commits Feat
+
+## Action
+
+Prefix the commit message with 'feat:' following the conventional commits format
+
+## Evidence
+
+- Seen in commit: feat: add roleplay functionality with chat management, routing, and translations
+- Pattern in commits.prefixes: ["feat"]
+
+---
+id: g4f.dev-instinct-commit-message-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Commit Message Length
+
+## Action
+
+Keep the commit message concise, aiming for an average length of ~74 characters
+
+## Evidence
+
+- Pattern in commits.averageLength: 74
+
+---
+id: g4f.dev-instinct-update-translation-ui-workflow
+trigger: "When someone wants to add or update translations and refine UI components or navigation"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: lllyyysss77/g4f.dev
+---
+
+# G4f.dev Instinct Update Translation Ui Workflow
+
+## Action
+
+Follow the update-translation-and-ui-workflow: edit/add translation keys in snippets.json, update translations.js, modify components.js, update router.js/store.js if needed, adjust index.html if necessary
+
+## Evidence
+
+- Workflow definition: update-translation-and-ui-workflow
+- Seen in commit sequence and files involved
+
