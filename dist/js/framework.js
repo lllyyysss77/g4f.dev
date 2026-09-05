@@ -432,6 +432,10 @@ async function includeAdsense() {
     if (window.location.pathname.startsWith("/chat/")) {
         return;
     }
+    const queryParams = new URLSearchParams(window.location.search);
+    if (queryParams.get("noads")) {
+        return;
+    }
     const script = document.createElement("script");
     script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5896143631849307";
     script.async = true;

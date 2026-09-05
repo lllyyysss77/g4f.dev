@@ -116,7 +116,7 @@ async function createClient(provider, options = {}) {
         if (providerLocalStorage[provider] && !options.apiKey) {
             options.apiKey = localStorage.getItem(providerLocalStorage[provider]);
         }
-        if (!options.apiKey && backupUrl) {
+        if (!options.apiKey && (backupUrl || provider === "default")) {
             options.apiKey = localStorage.getItem("g4f_session");
         }
     }
