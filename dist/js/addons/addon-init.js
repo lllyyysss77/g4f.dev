@@ -1974,7 +1974,19 @@ function showCloudSyncLoggedIn(user) {
     if (loginSection) loginSection.style.display = "none";
     if (syncSection) syncSection.style.display = "block";
     if (userEl) userEl.textContent = user.name || user.email || "User";
-    
+
+    // Derive and store workspace secret for cross-device sync
+    if (user.id) {
+        ensureWorkspaceSecret().then((secret) => {
+            if (secret && appStorage.getItem("secretConversationSync") === "true") {
+                // Auto-sync conversations on login
+                syncConversationsFromSecret().then(() => {
+                    syncConversationsToSecret().catch(() => {});
+                }).catch(() => {});
+            }
+        }).catch(() => {});
+    }
+
     // Update sidebar login/logout buttons
     const sidebarLoginBtn = document.getElementById("sidebar-login-btn");
     const sidebarLogoutBtn = document.getElementById("sidebar-logout-btn");
@@ -2107,6 +2119,7 @@ async function cloudSyncLogout() {
     appStorage.removeItem("g4f_session");
     appStorage.removeItem("g4f_user");
     appStorage.removeItem("g4f_expires");
+    appStorage.removeItem("g4f_workspace_secret");
     showCloudSyncLogin();
 }
 
@@ -2210,9 +2223,366 @@ async function syncConversationsFromCloud() {
     }
 }
 
+// ============================================================
+// Secret Conversation Storage (local server, per-user)
+// ============================================================
+
+/**
+ * Derive a deterministic workspace secret from the user's login details.
+ * Uses SHA-256(user.id + ":" + g4f_session token) so the same user on
+ * any device produces the same secret, enabling cross-device sync.
+ * Returns null if user is not logged in.
+ */
+async function deriveWorkspaceSecret() {
+    const raw = appStorage.getItem("g4f_user");
+    if (!raw) return null;
+    try {
+        const user = JSON.parse(raw);
+        if (!user || !user.id) return null;
+        // Prefer a persistent secret from the remote user object (user.secret).
+        // This is stable across logins/devices, unlike the session token.
+        if (user.secret) {
+            const input = `${user.id}:${user.secret}`;
+            const data = await new TextEncoder().encode(input);
+            const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+        return null;
+    } catch (e) {
+        console.error("Failed to derive workspace secret:", e);
+        return null;
+    }
+}
+
+/**
+ * Ensure the workspace secret is generated and stored after login.
+ * Called from showCloudSyncLoggedIn and handleCloudSyncCallback.
+ * Falls back to requesting the secret from an online device if
+ * user.secret is not available in the local user object.
+ */
+async function ensureWorkspaceSecret() {
+    // Only regenerate if not already set or user changed
+    const existing = appStorage.getItem("g4f_workspace_secret");
+    if (existing) return existing;
+    const secret = await deriveWorkspaceSecret();
+    if (secret) {
+        appStorage.setItem("g4f_workspace_secret", secret);
+        return secret;
+    }
+    // No user.secret available — try requesting from an online device
+    const shared = await requestSecretFromOnlineDevice();
+    if (shared) {
+        appStorage.setItem("g4f_workspace_secret", shared);
+        return shared;
+    }
+    return null;
+}
+
+// ============================================================
+// Cross-device workspace secret sharing
+// ============================================================
+
+/**
+ * Request the workspace secret from an already-online device.
+ * Creates a pending request on the server, then polls until the
+ * online device confirms (or timeout).
+ */
+async function requestSecretFromOnlineDevice(timeoutMs = 120000) {
+    const userId = getSecretUserId();
+    if (!userId) return null;
+    const baseUrl = framework.backendUrl || window.location.origin;
+    const deviceName = navigator.userAgent.includes("Mobile") ? "Mobile" : "Desktop";
+    try {
+        const resp = await fetch(`${baseUrl}/v1/secret/request`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-user-id": userId },
+            body: JSON.stringify({ device_name: deviceName }),
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const requestId = data.request_id;
+        if (!requestId) return null;
+        console.log(`Secret request created: ${requestId}. Waiting for online device to confirm...`);
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 3000));
+            const pollResp = await fetch(`${baseUrl}/v1/secret/request/${encodeURIComponent(requestId)}`, {
+                headers: { "x-user-id": userId },
+            });
+            if (!pollResp.ok) continue;
+            const pollData = await pollResp.json();
+            if (pollData.status === "confirmed" && pollData.secret) {
+                console.log("Workspace secret received from online device.");
+                return pollData.secret;
+            }
+            if (pollData.status === "expired" || pollData.status === "not_found") {
+                console.warn("Secret request expired or not found.");
+                return null;
+            }
+        }
+        console.warn("Secret request timed out.");
+        return null;
+    } catch (e) {
+        console.error("requestSecretFromOnlineDevice failed:", e);
+        return null;
+    }
+}
+
+/**
+ * Check for pending secret requests from other devices and confirm them.
+ * Called periodically when this device already has the workspace secret.
+ */
+async function checkAndConfirmSecretRequests() {
+    const userId = getSecretUserId();
+    if (!userId) return;
+    const existingSecret = appStorage.getItem("g4f_workspace_secret");
+    if (!existingSecret) return;
+    const baseUrl = framework.backendUrl || window.location.origin;
+    try {
+        const resp = await fetch(`${baseUrl}/v1/secret/requests`, {
+            headers: { "x-user-id": userId },
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const requests = data.requests || [];
+        for (const req of requests) {
+            if (req.status === "pending") {
+                console.log(`Confirming secret request from device: ${req.device_name} (${req.id})`);
+                await fetch(`${baseUrl}/v1/secret/request/confirm`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-user-id": userId },
+                    body: JSON.stringify({ request_id: req.id, workspace_secret: existingSecret }),
+                });
+            }
+        }
+    } catch (e) {
+        console.error("checkAndConfirmSecretRequests failed:", e);
+    }
+}
+
+let _secretRequestCheckInterval = null;
+function startSecretRequestPolling() {
+    if (_secretRequestCheckInterval) clearInterval(_secretRequestCheckInterval);
+    _secretRequestCheckInterval = setInterval(() => {
+        if (appStorage.getItem("g4f_workspace_secret") && getSecretUserId()) {
+            checkAndConfirmSecretRequests().catch(() => {});
+        }
+    }, 10000);
+}
+
+/**
+ * Get the user ID from the stored g4f_user JSON.
+ */
+function getSecretUserId() {
+    const raw = appStorage.getItem("g4f_user");
+    if (!raw) return null;
+    try {
+        const user = JSON.parse(raw);
+        return user && user.id ? user.id : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Build headers for secret conversation API calls.
+ * Includes x-user-id and x-workspace-secret when available.
+ */
+async function getSecretHeaders(extra = {}) {
+    const headers = { "Content-Type": "application/json", ...extra };
+    const userId = getSecretUserId();
+    if (userId) headers["x-user-id"] = userId;
+    const secret = appStorage.getItem("g4f_workspace_secret");
+    if (secret) headers["x-workspace-secret"] = secret;
+    return headers;
+}
+
+/**
+ * Upload all local conversations to the user's secret storage on the local server.
+ */
+async function syncConversationsToSecret() {
+    const userId = getSecretUserId();
+    if (!userId) {
+        alert("Please log in to use Secret Storage.");
+        cloudSyncLoginRedirect();
+        return;
+    }
+    showCloudSyncLoading("Uploading to Secret Storage...");
+    try {
+        const conversations = await list_conversations();
+        if (!conversations || conversations.length === 0) {
+            hideCloudSyncLoading();
+            alert("No conversations to upload.");
+            return;
+        }
+        const baseUrl = framework.backendUrl || window.location.origin;
+        const headers = await getSecretHeaders();
+        const response = await fetch(`${baseUrl}/v1/secret/conversations/sync`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ conversations })
+        });
+        hideCloudSyncLoading();
+        if (response.ok) {
+            const data = await response.json();
+            console.log("Conversations synced to secret storage:", data);
+            alert(`${conversations.length} conversations uploaded to Secret Storage!`);
+        } else {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || error.error || "Sync failed");
+        }
+    } catch (e) {
+        hideCloudSyncLoading();
+        console.error("Secret storage upload failed:", e);
+        alert("Failed to upload to Secret Storage: " + e.message);
+    }
+}
+
+/**
+ * Download all conversations from the user's secret storage and save locally.
+ */
+async function syncConversationsFromSecret() {
+    const userId = getSecretUserId();
+    if (!userId) {
+        alert("Please log in to use Secret Storage.");
+        cloudSyncLoginRedirect();
+        return;
+    }
+    showCloudSyncLoading("Downloading from Secret Storage...");
+    try {
+        const baseUrl = framework.backendUrl || window.location.origin;
+        const headers = await getSecretHeaders();
+        const response = await fetch(`${baseUrl}/v1/secret/conversations`, { headers });
+        if (response.ok) {
+            const data = await response.json();
+            const items = data.conversations || data.index || [];
+            if (items.length === 0) {
+                hideCloudSyncLoading();
+                alert("No conversations found in Secret Storage.");
+                return;
+            }
+            let downloaded = 0;
+            for (const item of items) {
+                const convId = item.id || item.conversation_id;
+                if (!convId) continue;
+                const convResp = await fetch(`${baseUrl}/v1/secret/conversations/${encodeURIComponent(convId)}`, { headers });
+                if (convResp.ok) {
+                    const conv = await convResp.json();
+                    delete conv.synced_at;
+                    delete conv.user_id;
+                    await save_conversation(conv);
+                    downloaded++;
+                }
+            }
+            await load_conversations();
+            hideCloudSyncLoading();
+            console.log(`Downloaded ${downloaded} conversations from Secret Storage`);
+            alert(`Downloaded ${downloaded} conversations from Secret Storage!`);
+        } else {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || error.error || "Download failed");
+        }
+    } catch (e) {
+        hideCloudSyncLoading();
+        console.error("Secret storage download failed:", e);
+        alert("Failed to download from Secret Storage: " + e.message);
+    }
+}
+
+/**
+ * Auto-sync the current conversation to secret storage if the toggle is enabled.
+ * Called after each conversation update.
+ */
+async function autoSyncCurrentConversation() {
+    if (appStorage.getItem("secretConversationSync") !== "true") return;
+    const userId = getSecretUserId();
+    if (!userId) return;
+    try {
+        const conversations = await list_conversations();
+        const current = conversations.find(c => c.id === window.conversation_id);
+        if (!current) return;
+        const baseUrl = framework.backendUrl || window.location.origin;
+        const headers = await getSecretHeaders();
+        await fetch(`${baseUrl}/v1/secret/conversations`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(current)
+        });
+    } catch (e) {
+        console.error("Auto-sync to secret storage failed:", e);
+    }
+}
+
+/**
+ * Pull new/updated conversations from secret storage that don't exist
+ * locally or have a newer `updated` timestamp. Used for cross-device sync.
+ * Returns the number of conversations pulled.
+ */
+async function pullNewSecretConversations() {
+    if (appStorage.getItem("secretConversationSync") !== "true") return 0;
+    const userId = getSecretUserId();
+    if (!userId) return 0;
+    try {
+        const baseUrl = framework.backendUrl || window.location.origin;
+        const headers = await getSecretHeaders();
+        const response = await fetch(`${baseUrl}/v1/secret/conversations`, { headers });
+        if (!response.ok) return 0;
+        const data = await response.json();
+        const remoteIndex = data.conversations || data.index || [];
+        if (remoteIndex.length === 0) return 0;
+
+        const localConversations = await list_conversations();
+        const localMap = new Map(localConversations.map(c => [c.id, c]));
+
+        let pulled = 0;
+        for (const item of remoteIndex) {
+            const convId = item.id || item.conversation_id;
+            if (!convId) continue;
+            const local = localMap.get(convId);
+            const remoteUpdated = item.updated || 0;
+            const localUpdated = local ? (local.updated || 0) : 0;
+            // Pull if remote is newer or doesn't exist locally
+            if (!local || remoteUpdated > localUpdated) {
+                const convResp = await fetch(`${baseUrl}/v1/secret/conversations/${encodeURIComponent(convId)}`, { headers });
+                if (convResp.ok) {
+                    const conv = await convResp.json();
+                    delete conv.synced_at;
+                    delete conv.user_id;
+                    await save_conversation(conv);
+                    pulled++;
+                }
+            }
+        }
+        if (pulled > 0) {
+            await load_conversations();
+            console.log(`Cross-device sync: pulled ${pulled} conversations from secret storage`);
+        }
+        return pulled;
+    } catch (e) {
+        console.error("Cross-device sync pull failed:", e);
+        return 0;
+    }
+}
+
+// Periodic cross-device sync: poll secret storage every 30 seconds
+let _secretSyncInterval = null;
+function startSecretSyncPolling() {
+    if (_secretSyncInterval) clearInterval(_secretSyncInterval);
+    _secretSyncInterval = setInterval(() => {
+        if (appStorage.getItem("secretConversationSync") === "true" && getSecretUserId()) {
+            pullNewSecretConversations().catch(() => {});
+        }
+    }, 30000); // 30 seconds
+}
+
 // Initialize cloud sync on page load
 handleCloudSyncCallback();
 checkCloudSyncSession();
+// Start cross-device sync polling
+startSecretSyncPolling();
+// Start cross-device secret request polling (confirm requests from other devices)
+startSecretRequestPolling();
 
 // Redirect to members login page (central G4F OAuth when available)
 function cloudSyncLoginRedirect(provider = null) {
@@ -2238,11 +2608,59 @@ const cloudSyncLoginBtn = document.getElementById("cloudSyncLoginBtn");
 const cloudSyncUploadBtn = document.getElementById("cloudSyncUpload");
 const cloudSyncDownloadBtn = document.getElementById("cloudSyncDownload");
 const cloudSyncLogoutBtn = document.getElementById("cloudSyncLogoutBtn");
+const secretSyncUploadBtn = document.getElementById("secretSyncUpload");
+const secretSyncDownloadBtn = document.getElementById("secretSyncDownload");
+const secretConversationSyncToggle = document.getElementById("secretConversationSync");
 
 if (cloudSyncLoginBtn) cloudSyncLoginBtn.addEventListener("click", () => cloudSyncLoginRedirect());
 if (cloudSyncUploadBtn) cloudSyncUploadBtn.addEventListener("click", syncConversationsToCloud);
 if (cloudSyncDownloadBtn) cloudSyncDownloadBtn.addEventListener("click", syncConversationsFromCloud);
 if (cloudSyncLogoutBtn) cloudSyncLogoutBtn.addEventListener("click", cloudSyncLogout);
+if (secretSyncUploadBtn) secretSyncUploadBtn.addEventListener("click", syncConversationsToSecret);
+if (secretSyncDownloadBtn) secretSyncDownloadBtn.addEventListener("click", syncConversationsFromSecret);
+const secretRequestBtn = document.getElementById("secretRequestBtn");
+if (secretRequestBtn) secretRequestBtn.addEventListener("click", async () => {
+    const userId = getSecretUserId();
+    if (!userId) {
+        alert("Please log in first.");
+        cloudSyncLoginRedirect();
+        return;
+    }
+    const existing = appStorage.getItem("g4f_workspace_secret");
+    if (existing) {
+        alert("Workspace secret is already set on this device.");
+        return;
+    }
+    secretRequestBtn.disabled = true;
+    secretRequestBtn.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i><span>Waiting for online device...</span>';
+    showCloudSyncLoading("Requesting secret from online device...");
+    try {
+        const secret = await requestSecretFromOnlineDevice();
+        hideCloudSyncLoading();
+        if (secret) {
+            appStorage.setItem("g4f_workspace_secret", secret);
+            alert("Workspace secret received from online device!");
+            if (appStorage.getItem("secretConversationSync") === "true") {
+                pullNewSecretConversations().catch(() => {});
+            }
+        } else {
+            alert("No online device responded. Make sure another device is logged in and online, then try again.");
+        }
+    } catch (e) {
+        hideCloudSyncLoading();
+        alert("Failed to get secret: " + e.message);
+    } finally {
+        secretRequestBtn.disabled = false;
+        secretRequestBtn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i><span>Get Secret from Online Device</span>';
+    }
+});
+if (secretConversationSyncToggle) {
+    // Restore saved state
+    secretConversationSyncToggle.checked = appStorage.getItem("secretConversationSync") === "true";
+    secretConversationSyncToggle.addEventListener("change", (e) => {
+        appStorage.setItem("secretConversationSync", e.target.checked ? "true" : "false");
+    });
+}
 
 // Expose functions to global scope
 window.toggleMCPServer = toggleMCPServer;
@@ -2256,6 +2674,14 @@ window.cloudSyncLoginRedirect = cloudSyncLoginRedirect;
 window.syncConversationsToCloud = syncConversationsToCloud;
 window.syncConversationsFromCloud = syncConversationsFromCloud;
 window.cloudSyncLogout = cloudSyncLogout;
+window.syncConversationsToSecret = syncConversationsToSecret;
+window.syncConversationsFromSecret = syncConversationsFromSecret;
+window.autoSyncCurrentConversation = autoSyncCurrentConversation;
+window.pullNewSecretConversations = pullNewSecretConversations;
+window.deriveWorkspaceSecret = deriveWorkspaceSecret;
+window.ensureWorkspaceSecret = ensureWorkspaceSecret;
+window.requestSecretFromOnlineDevice = requestSecretFromOnlineDevice;
+window.checkAndConfirmSecretRequests = checkAndConfirmSecretRequests;
 
 // Settings Search Logic
 const settingsSearch = document.getElementById('settingsSearch');

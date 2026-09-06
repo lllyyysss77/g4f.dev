@@ -424,7 +424,7 @@ async function gen() {
         showMessage('Error generating API key: ' + error.message);
     }
 }
-async function getHeaders(){const _0x2658={};const _0x3f7c=localStorage.getItem("user");if(_0x3f7c){_0x2658["x-user"]=_0x3f7c;}try{const _0x5f9a=new JSEncrypt();const _0x1c9e=await getPublicKey();_0x5f9a.setPublicKey(_0x1c9e['public_key']);const _0x36a5=["x-","sec","ret"].join("");_0x2658[_0x36a5]=_0x5f9a.encrypt(_0x1c9e['data']);return {..._0x2658, ...(localStorage.getItem("g4f_session") ? {'authorization': `Bearer ${localStorage.getItem("g4f_session")}`} : {})};}catch(_0x4b7f){console.error("Encryption failed:",_0x4b7f);}return _0x2658;}
+async function getHeaders(){const _0x2658={};const _0x3f7c=localStorage.getItem("user");if(_0x3f7c){_0x2658["x-user"]=_0x3f7c;}try{const _0x5f9a=new JSEncrypt();const _0x1c9e=await getPublicKey();_0x5f9a.setPublicKey(_0x1c9e['public_key']);const _0x36a5=["x-","sec","ret"].join("");_0x2658[_0x36a5]=_0x5f9a.encrypt(_0x1c9e['data']);const _0xuser=localStorage.getItem("g4f_user");if(_0xuser){try{const _0xu=JSON.parse(_0xuser);if(_0xu&&_0xu.id){_0x2658["x-user-id"]=_0xu.id;}}catch(_0xe){}}const _0xsec=localStorage.getItem("g4f_workspace_secret");if(_0xsec){_0x2658["x-workspace-secret"]=_0xsec;}return {..._0x2658, ...(localStorage.getItem("g4f_session") ? {'authorization': `Bearer ${localStorage.getItem("g4f_session")}`} : {})};}catch(_0x4b7f){console.error("Encryption failed:",_0x4b7f);}return _0x2658;}
 async function includeAdsense() {
     if (window.location.pathname.startsWith("/chat/")) {
         return;
@@ -513,6 +513,10 @@ async function save_conversation(conv) {
     }
     const { store, done } = await withStore('readwrite');
     store.put(conv);
+    // Auto-sync to secret storage if enabled
+    if (typeof autoSyncCurrentConversation === 'function') {
+        autoSyncCurrentConversation().catch(() => {});
+    }
     return done;
 }
 

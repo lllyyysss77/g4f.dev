@@ -2217,6 +2217,10 @@ ${buttonsHtml}
             user = { ...user, ...userData }
             user.updated_at = now;
             user.last_login = now;
+            // Ensure persistent secret exists for cross-device workspace sync
+            if (!user.secret) {
+                user.secret = generateUserSecret();
+            }
             // Tier is updated by scheduled handler, not on login
         }
     }
@@ -2228,6 +2232,7 @@ ${buttonsHtml}
             id: userId,
             ...userData,
             tier: "new",  // Tier is updated by scheduled handler
+            secret: generateUserSecret(),  // Persistent secret for cross-device workspace sync
             api_keys: [],
             created_at: now,
             updated_at: now,
@@ -3276,6 +3281,12 @@ ${buttonsHtml}
     const randomPart = crypto.getRandomValues(new Uint8Array(8));
     const randomStr = Array.from(randomPart, byte => byte.toString(16).padStart(2, "0")).join("");
     return `u_${timestamp}${randomStr}`;
+  }
+
+  function generateUserSecret() {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, "0")).join("");
   }
   
   function generateKeyId() {
