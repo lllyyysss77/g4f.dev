@@ -700,7 +700,7 @@ async function updateLiveProviderOptions(optgroup) {
                 return;
             }
             let option = document.createElement("option");
-            if (config.is_hidden) {
+            if (config.is_hidden || config.is_offline) {
                 option.disabled = true;
             }
             option.value = name;
