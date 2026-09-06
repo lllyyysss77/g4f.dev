@@ -692,10 +692,7 @@ function nl2br(str) {
 async function getPublicKey(backendUrl) {
     let response;
     try {
-        response = await fetch(`${backendUrl || framework.backendUrl}/backend-api/v2/public-key`, {method: 'POST'});
-        if (!response.ok) {
-            response = await fetch(`${backendUrl || framework.backendUrl}/backend-api/v2/public-key`);
-        }
+        response = await fetch(`${backendUrl || framework.backendUrl}/backend-api/v2/public-key`);
     } catch (e) {
         add_error(`Public key fetch failed: ${e}`, e);
         throw new Error("Failed to load public key: " + (e.message || e));

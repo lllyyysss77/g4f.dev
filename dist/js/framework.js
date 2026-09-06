@@ -376,10 +376,7 @@ function nl2br(str) {
     return div.innerHTML.replace(/\n/g, "<br>");
 }
 async function getPublicKey(backendUrl) {
-    let response = await fetch(`${backendUrl || framework.backendUrl}/backend-api/v2/public-key`, {method: 'POST'});
-    if (!response.ok) {
-        response = await fetch(`${backendUrl || framework.backendUrl}/backend-api/v2/public-key`);
-    }
+    let response = await fetch(`${backendUrl || framework.backendUrl}/backend-api/v2/public-key`);
     if (response.ok) {
         return await response.json();
     }
