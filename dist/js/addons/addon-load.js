@@ -191,53 +191,47 @@ async function on_api() {
     document.getElementById('recognition-language').placeholder = await get_recognition_language();
 }
 
-addonsLoaded.then(() => {
+addonsLoaded.then(async () => {
     console.log("addonsLoaded, calling on_load and on_api");
-    domReady.then(async () => {
-        console.log("domReady, calling on_load and on_api");
-        await on_load();
-        await on_api();
 
-        if (window.conversation_id) {
-            let conversation = await get_conversation(window.conversation_id);
-            if (!conversation) {
-                // New conversation not yet in IndexedDB, nothing to load
-                return;
-            }
-            if (!conversation.share) {
-                await load_conversation(conversation);
-                await play_last_message();
-                return;
-            }
-            const response = await fetch(`${framework.backendUrl}/backend-api/v2/chat/${window.conversation_id}`, {
-                headers: {'accept': 'application/json'},
-            });
-            if (!response.ok) {
-                return await load_conversation(conversation);
-            }
-            conversation = await response.json();
-            if (conversation.id == window.conversation_id) {
-                await save_conversation(conversation);
-                await load_conversations();
-            }
-            await load_conversation(window.conversation_id);
-        } else {
-            window.conversation_id = generateUUID();
+    await on_load();
+    await on_api();
+
+    if (window.conversation_id) {
+        let conversation = await get_conversation(window.conversation_id);
+        if (conversation && !conversation.share) {
+            await load_conversation(conversation);
+            await play_last_message();
+            return;
         }
+        const response = await fetch(`${framework.backendUrl}/backend-api/v2/chat/${window.conversation_id}`, {
+            headers: {'accept': 'application/json'},
+        });
+        if (!response.ok) {
+            return await load_conversation(conversation);
+        }
+        conversation = await response.json();
+        if (conversation.id == window.conversation_id) {
+            await save_conversation(conversation);
+            await load_conversations();
+        }
+        await load_conversation(window.conversation_id);
+    } else {
+        window.conversation_id = generateUUID();
+    }
         
-        // Set default sidebar state based on screen size
-        if (window.innerWidth >= 640) { // 40em = 640px
-            sidebar.classList.add("shown");
-            sidebar.classList.remove("minimized");
-        } else {
-            sidebar.classList.remove("shown");
-        }
-        // Ensure sidebar is shown by default on desktop
-        if (window.innerWidth >= 640) { // 40em = 640px
-            sidebar.classList.add("shown");
-            sidebar.classList.remove("minimized");
-        }
-    });
+    // Set default sidebar state based on screen size
+    if (window.innerWidth >= 640) { // 40em = 640px
+        sidebar.classList.add("shown");
+        sidebar.classList.remove("minimized");
+    } else {
+        sidebar.classList.remove("shown");
+    }
+    // Ensure sidebar is shown by default on desktop
+    if (window.innerWidth >= 640) { // 40em = 640px
+        sidebar.classList.add("shown");
+        sidebar.classList.remove("minimized");
+    }
 });
 
 let refreshOnHidden = true;
