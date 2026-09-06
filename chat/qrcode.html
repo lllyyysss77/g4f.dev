@@ -325,7 +325,8 @@
                     camStatus.innerText = 'Camera Success: ' + result.data;
                     console.log('decoded QR code:', result);
                     if (result.data.startsWith(window.location.origin)) {
-                        window.parent.location = result.data;
+                        window.parent.location.href = result.data;
+                        window.parent.location.reload()
                     }
                 }, {
                     highlightScanRegion: true,
